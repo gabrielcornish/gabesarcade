@@ -22,3 +22,4 @@
 2026-07-03T22:01:09-07:00	@<prologic https://twtxt.net/user/prologic/twtxt.txt> Thanks for the heads up! I fixed my nick and corrected my reply. I'm still learning lol. I still need to get setup with a client, I'm using my timeline at the moment, but that's finicky due to CORS in the browser. By chance do you know how I would go about signing up with twtxt.net?
 2026-07-04T07:43:37-07:00	(#qn6ndt3ucjy5) @<prologic https://twtxt.net/user/prologic/twtxt.txt> 😂 Noob question, do we just do this out in the open? I can also send you an aliased email to take the conversation private.
 2026-07-04T07:51:05-07:00	🇺🇸 Happy 4th of July everyone!
+2026-07-04T20:53:05Z	Alright, this is a test post from the twtxt.app 🤞
