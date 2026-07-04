@@ -1,0 +1,24 @@
+# nick = GabesArcade
+# url = https://gabesarcade.com/twtxt.txt
+# avatar = https://gabesarcade.com/favicon.ico
+# description = My small corner of the web. Come on in.
+# link = Home https://gabesarcade.com
+# link = twtxt https://gabesarcade.com/twtxt.txt
+# link = RSS https://gabesarcade.com/feed.xml
+# link = Following  https://gabesarcade.com?timeline
+# follow = rdlmda https://rdlmda.me/twtxt.txt
+# follow = 🎮-reddit-games https://raw.githubusercontent.com/gabrielcornish/twtxt-timeline/main/feeds/reddit-games.txt
+# follow = bender https://twtxt.net/user/bender/twtxt.txt
+# follow = prologic https://twtxt.net/user/prologic/twtxt.txt
+
+2026-07-02T12:00:40-07:00	I've been trying to figure out an easy way to write micro posts on the internet. I think I've settled on using Twxtxt as my format.
+2026-07-02T12:03:57-07:00	![Enjoy Today](https://gabesarcade.com/images/enjoy_today.gif)
+2026-07-02T13:22:22-07:00	🎵 Now listening: battlecry - Nujabes
+2026-07-02T15:29:44-07:00	Somedays I stop and realize what a privilege it is to be able to make games for a living. It's not a stable career. It's not an easy career. But, when things align, it's a fulfilling career.
+2026-07-03T10:00:05-07:00	Ok, so I think I've set up a good posting solution. I use twtxt to post updates. My site renders those in HTML and generates an RSS feed. The RSS feed is then cross-posted by Micro.Blog. Clean and simple.
+2026-07-03T10:59:37-07:00	I miss the ps2 era of gaming. Withing PS6 dropping physical discs, I'm reminded of how great it is to pop in an old ps2 game and have it run flawlessly. ![PS2 Vibes](https://gabesarcade.com/images/e3-ps2.png)
+2026-07-03T15:06:41-07:00	twtxt is awesome! How am I just discovering this?
+2026-07-03T19:56:30-07:00	@<bender https://twtxt.net/user/bender/twtxt.txt> Thanks for the warm welcome! I don't actually have a twtxt client setup yet, but you showed up in the timeline on my site: https://gabesarcade.com/?timeline - which is kind blowing my mind right now.
+2026-07-03T22:01:09-07:00	@<prologic https://twtxt.net/user/prologic/twtxt.txt> Thanks for the heads up! I fixed my nick and corrected my reply. I'm still learning lol. I still need to get setup with a client, I'm using my timeline at the moment, but that's finicky due to CORS in the browser. By chance do you know how I would go about signing up with twtxt.net?
+2026-07-04T07:43:37-07:00	(#qn6ndt3ucjy5) @<prologic https://twtxt.net/user/prologic/twtxt.txt> 😂 Noob question, do we just do this out in the open? I can also send you an aliased email to take the conversation private.
+2026-07-04T07:51:05-07:00	🇺🇸 Happy 4th of July everyone!

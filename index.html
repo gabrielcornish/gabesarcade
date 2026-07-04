@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gabe's Arcade</title>
+<link rel="alternate" type="application/rss+xml" title="RSS" href="feed.xml">
+<link rel="alternate" type="text/plain" title="twtxt" href="twtxt.txt">
+<style>
+  /* ============================================================
+     THEME — edit these to restyle the page.
+     Change a value here and it applies everywhere below.
+     The page follows the visitor's system light/dark setting;
+     the dark palette is in the media query just below.
+     ============================================================ */
+  :root {
+    --bg:        #ffffff;   /* page background            */
+    --fg:        #111111;   /* main text                  */
+    --muted:     #555555;   /* timestamps, quiet text     */
+    --accent:    #1a3d8f;   /* links                      */
+    --rule:      #cccccc;   /* dividing lines             */
+    --highlight: #fff6d5;   /* linked-to post background  */
+    --maxwidth:  40em;      /* how wide the column gets    */
+    --bodyfont:  Georgia, "Times New Roman", serif;
+    --monofont:  "Courier New", monospace;
+  }
+
+  /* Dark theme — used automatically when the visitor's device is
+     set to dark mode. Edit these values to taste; the layout and
+     fonts above are shared, only the colors change here. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #121212;   /* page background            */
+      --fg:        #e6e6e6;   /* main text                  */
+      --muted:     #9a9a9a;   /* timestamps, quiet text     */
+      --accent:    #8ab4f8;   /* links                      */
+      --rule:      #333333;   /* dividing lines             */
+      --highlight: #3a3320;   /* linked-to post background  */
+    }
+  }
+
+  /* ============================================================
+     BASE
+     ============================================================ */
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--bodyfont);
+    line-height: 1.5;
+    max-width: var(--maxwidth);
+    margin: 2em auto;
+    padding: 0 1em;
+  }
+  a { color: var(--accent); }
+  a:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ============================================================
+     PROFILE HEADER — built from the # metadata in twtxt.txt
+     ============================================================ */
+  .profile {
+    display: flex;
+    align-items: center;
+    gap: 1em;
+    border-bottom: 2px solid var(--fg);
+    padding-bottom: 1em;
+    margin-bottom: 1.5em;
+  }
+  .profile-avatar {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .profile-text { margin: 0; }
+  .profile-nick { font-size: 1.4em; margin: 0; }
+  .profile-desc { margin: 0.2em 0 0; color: var(--muted); }
+  .profile-links { margin: 0.3em 0 0; font-size: 0.9em; }
+
+  /* ============================================================
+     POSTS
+     ============================================================ */
+  .post {
+    border-bottom: 1px solid var(--rule);
+    padding: 1em 0;
+  }
+  .post:target {
+    /* highlight the post someone followed a permalink to */
+    background: var(--highlight);
+    scroll-margin-top: 1em;
+  }
+  .post-body p { margin: 0 0 0.6em; }
+  .post-body p:last-child { margin-bottom: 0; }
+  .post-body img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0.5em 0;
+  }
+  .post-meta {
+    font-size: 0.85em;
+    color: var(--muted);
+    margin-top: 0.5em;
+    font-family: var(--monofont);
+  }
+  .post-meta a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .post-meta a:hover { text-decoration: underline; }
+
+  /* compact "in reply" marker shown instead of a raw (#hash) subject */
+  .post-subject {
+    font-size: 0.85em;
+    color: var(--muted);
+    font-family: var(--monofont);
+    margin: 0 0 0.4em;
+  }
+  .post-subject a { color: var(--muted); }
+
+  .notice { color: var(--muted); font-style: italic; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+</head>
+<body>
+
+<header class="profile" id="profile"></header>
+
+<main id="feed">
+  <p class="notice" id="loading">Loading feed&hellip;</p>
+  <noscript>
+    <style>#loading { display: none; }</style>
+    <p class="notice">This page uses JavaScript to show the feed here. You can
+    read the posts directly in <a href="twtxt.txt">twtxt.txt</a> or subscribe
+    via <a href="feed.xml">RSS</a>.</p>
+  </noscript>
+</main>
+
+<script>
+/* ------------------------------------------------------------------
+   twtxt display page
+   - fetches /twtxt.txt
+   - reads the # metadata header for the profile
+   - renders posts newest-first
+   - each post gets a permalink whose id is the twtxt "twt hash"
+     (Blake2b-256 of url\n timestamp\n text, base32, lowercased,
+      last 7 chars) so the ids match the wider twtxt ecosystem.
+   ------------------------------------------------------------------ */
+
+const FEED_URL = "twtxt.txt"; // lives in the site root, alongside this page
+
+/* ---------- twt hash ----------
+   Each post's id is the twtxt "twt hash": Blake2b-256 of
+   "<feed url>\n<timestamp>\n<text>", base32-encoded (no padding),
+   lowercased. Per the twt-hash-v2 spec, twts timestamped on/after
+   2026-07-01T00:00:00Z keep the FIRST 12 characters; older twts keep the
+   v1 form (LAST 7). Using the real hash means these ids match what other
+   twtxt clients compute, so permalinks and RSS ids agree with the wider
+   ecosystem.
+
+   BLAKE2b below is inlined from blakejs (dcposch, MIT license, per
+   RFC 7693) so this page stays a single file with no dependencies.
+   Verified against the v2 spec vector (https://example.com/twtxt.txt,
+   2026-07-01T00:00:00Z, "Hello World!" -> myzxbwxktuvs). */
+const twtHash = (function () {
+  function ADD64AA(v, a, b) {
+    const o0 = v[a] + v[b]; let o1 = v[a + 1] + v[b + 1];
+    if (o0 >= 0x100000000) o1++;
+    v[a] = o0; v[a + 1] = o1;
+  }
+  function ADD64AC(v, a, b0, b1) {
+    let o0 = v[a] + b0; if (b0 < 0) o0 += 0x100000000;
+    let o1 = v[a + 1] + b1; if (o0 >= 0x100000000) o1++;
+    v[a] = o0; v[a + 1] = o1;
+  }
+  function B2B_GET32(arr, i) {
+    return arr[i] ^ (arr[i + 1] << 8) ^ (arr[i + 2] << 16) ^ (arr[i + 3] << 24);
+  }
+  const v = new Uint32Array(32);
+  const m = new Uint32Array(32);
+  function B2B_G(a, b, c, d, ix, iy) {
+    const x0 = m[ix], x1 = m[ix + 1], y0 = m[iy], y1 = m[iy + 1];
+    ADD64AA(v, a, b); ADD64AC(v, a, x0, x1);
+    let xor0 = v[d] ^ v[a], xor1 = v[d + 1] ^ v[a + 1];
+    v[d] = xor1; v[d + 1] = xor0;
+    ADD64AA(v, c, d);
+    xor0 = v[b] ^ v[c]; xor1 = v[b + 1] ^ v[c + 1];
+    v[b] = (xor0 >>> 24) ^ (xor1 << 8); v[b + 1] = (xor1 >>> 24) ^ (xor0 << 8);
+    ADD64AA(v, a, b); ADD64AC(v, a, y0, y1);
+    xor0 = v[d] ^ v[a]; xor1 = v[d + 1] ^ v[a + 1];
+    v[d] = (xor0 >>> 16) ^ (xor1 << 16); v[d + 1] = (xor1 >>> 16) ^ (xor0 << 16);
+    ADD64AA(v, c, d);
+    xor0 = v[b] ^ v[c]; xor1 = v[b + 1] ^ v[c + 1];
+    v[b] = (xor1 >>> 31) ^ (xor0 << 1); v[b + 1] = (xor0 >>> 31) ^ (xor1 << 1);
+  }
+  const BLAKE2B_IV32 = new Uint32Array([
+    0xf3bcc908, 0x6a09e667, 0x84caa73b, 0xbb67ae85, 0xfe94f82b, 0x3c6ef372,
+    0x5f1d36f1, 0xa54ff53a, 0xade682d1, 0x510e527f, 0x2b3e6c1f, 0x9b05688c,
+    0xfb41bd6b, 0x1f83d9ab, 0x137e2179, 0x5be0cd19
+  ]);
+  const SIGMA8 = [
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3,
+    11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4,7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8,
+    9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13,2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9,
+    12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11,13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10,
+    6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5,10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0,
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3
+  ];
+  const SIGMA82 = new Uint8Array(SIGMA8.map(function (x) { return x * 2; }));
+  const parameterBlock = new Uint8Array(64);
+  function blake2bCompress(ctx, last) {
+    let i = 0;
+    for (i = 0; i < 16; i++) { v[i] = ctx.h[i]; v[i + 16] = BLAKE2B_IV32[i]; }
+    v[24] = v[24] ^ ctx.t; v[25] = v[25] ^ (ctx.t / 0x100000000);
+    if (last) { v[28] = ~v[28]; v[29] = ~v[29]; }
+    for (i = 0; i < 32; i++) m[i] = B2B_GET32(ctx.b, 4 * i);
+    for (i = 0; i < 12; i++) {
+      B2B_G(0,8,16,24, SIGMA82[i*16+0], SIGMA82[i*16+1]);
+      B2B_G(2,10,18,26, SIGMA82[i*16+2], SIGMA82[i*16+3]);
+      B2B_G(4,12,20,28, SIGMA82[i*16+4], SIGMA82[i*16+5]);
+      B2B_G(6,14,22,30, SIGMA82[i*16+6], SIGMA82[i*16+7]);
+      B2B_G(0,10,20,30, SIGMA82[i*16+8], SIGMA82[i*16+9]);
+      B2B_G(2,12,22,24, SIGMA82[i*16+10], SIGMA82[i*16+11]);
+      B2B_G(4,14,16,26, SIGMA82[i*16+12], SIGMA82[i*16+13]);
+      B2B_G(6,8,18,28, SIGMA82[i*16+14], SIGMA82[i*16+15]);
+    }
+    for (i = 0; i < 16; i++) ctx.h[i] = ctx.h[i] ^ v[i] ^ v[i + 16];
+  }
+  function blake2bInit(outlen) {
+    const ctx = { b: new Uint8Array(128), h: new Uint32Array(16), t: 0, c: 0, outlen: outlen };
+    parameterBlock.fill(0);
+    parameterBlock[0] = outlen;
+    parameterBlock[2] = 1; // fanout
+    parameterBlock[3] = 1; // depth
+    for (let i = 0; i < 16; i++) {
+      ctx.h[i] = BLAKE2B_IV32[i] ^ B2B_GET32(parameterBlock, i * 4);
+    }
+    return ctx;
+  }
+  function blake2bUpdate(ctx, input) {
+    for (let i = 0; i < input.length; i++) {
+      if (ctx.c === 128) { ctx.t += ctx.c; blake2bCompress(ctx, false); ctx.c = 0; }
+      ctx.b[ctx.c++] = input[i];
+    }
+  }
+  function blake2bFinal(ctx) {
+    ctx.t += ctx.c;
+    while (ctx.c < 128) ctx.b[ctx.c++] = 0;
+    blake2bCompress(ctx, true);
+    const out = new Uint8Array(ctx.outlen);
+    for (let i = 0; i < ctx.outlen; i++) out[i] = ctx.h[i >> 2] >> (8 * (i & 3));
+    return out;
+  }
+  function blake2b256(bytes) {
+    const ctx = blake2bInit(32);
+    blake2bUpdate(ctx, bytes);
+    return blake2bFinal(ctx);
+  }
+  function base32NoPad(bytes) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let bits = 0, value = 0, out = "";
+    for (let i = 0; i < bytes.length; i++) {
+      value = (value << 8) | bytes[i];
+      bits += 8;
+      while (bits >= 5) { out += alphabet[(value >>> (bits - 5)) & 31]; bits -= 5; }
+      value = value & ((1 << bits) - 1); // keep only leftover bits (avoids 32-bit overflow)
+    }
+    if (bits > 0) out += alphabet[(value << (5 - bits)) & 31];
+    return out.toLowerCase();
+  }
+  /* The twt-hash spec normalizes the timestamp before hashing: fractional
+     seconds are dropped (not rounded), a minute-precision time gains ":00",
+     "+00:00"/"-00:00" become "Z", a missing timezone means UTC, and any
+     other offset is kept as written. Feeds written by this site's composer
+     are already in this form, so for them this is a no-op; it only matters
+     for hand-edited timestamps. An unrecognisable timestamp is hashed as
+     written, matching the "as it appears in the feed" fallback. */
+  function normalizeTimestamp(ts) {
+    const m = ts.match(
+      /^(\d{4}-\d{2}-\d{2})[Tt ](\d{2}:\d{2})(?::(\d{2}))?(?:\.\d+)?(?:(Z|z)|([+-]\d{2}:\d{2}))?$/
+    );
+    if (!m) return ts;
+    let zone = m[5] || "Z";
+    if (zone === "+00:00" || zone === "-00:00") zone = "Z";
+    return m[1] + "T" + m[2] + ":" + (m[3] || "00") + zone;
+  }
+  // v2 (first 12 chars) applies to twts timestamped on/after this epoch;
+  // older twts keep the v1 form (last 7 chars). See the twt-hash-v2 spec.
+  const V2_EPOCH = Date.parse("2026-07-01T00:00:00Z");
+  const cache = new Map(); // payload -> hash; a post is hashed once, ever
+  return function (feedUrl, timestamp, text) {
+    const ts = normalizeTimestamp(timestamp.trim());
+    const payload = feedUrl + "\n" + ts + "\n" + text;
+    const hit = cache.get(payload);
+    if (hit !== undefined) return hit;
+    const bytes = new TextEncoder().encode(payload);
+    const b32 = base32NoPad(blake2b256(bytes));
+    const t = Date.parse(ts);
+    const hash = (!isNaN(t) && t >= V2_EPOCH) ? b32.slice(0, 12) : b32.slice(-7);
+    cache.set(payload, hash);
+    return hash;
+  };
+})();
+
+/* ---------- escape text before inserting as HTML ---------- */
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+}
+
+/* ---------- turn one post's text into safe HTML ----------
+   - images:   ![alt](url)  OR a bare image URL  ->  <img loading="lazy">
+   - links:    [text](url) markdown links and bare http(s) URLs -> <a>
+   - mentions: @<nick url> (twtxt mention syntax)  ->  <a>@nick</a>
+   - line breaks: U+2028 (twtxt multiline separator) -> <br>
+   Order matters: escape first, then linkify on the escaped string.
+   The URL patterns exclude ">" so a URL written inside angle brackets
+   (like a mention) doesn't swallow the closing bracket. */
+const IMG_MD = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
+const LINK_MD = /\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
+const MENTION_RE = /@<(?:([^\s<>]+)\s+)?(https?:\/\/[^\s<>]+)>/g;
+const URL_RE = /(https?:\/\/[^\s<>]+)/g;
+const IMG_EXT = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
+
+function attrEscape(s) {
+  // escape a URL/alt destined for an HTML attribute value
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+                  .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* run a regex over the text tokens in a list, turning each match into a
+   token built by make(match); non-matching stretches stay text tokens.
+   Non-text tokens pass through untouched, so earlier passes are final. */
+function splitTokens(tokens, re, make) {
+  const out = [];
+  tokens.forEach(function (tok) {
+    if (tok.t !== "text") { out.push(tok); return; }
+    let last = 0;
+    let match;
+    re.lastIndex = 0;
+    while ((match = re.exec(tok.v)) !== null) {
+      if (match.index > last) out.push({ t: "text", v: tok.v.slice(last, match.index) });
+      out.push(make(match));
+      last = re.lastIndex;
+    }
+    if (last < tok.v.length) out.push({ t: "text", v: tok.v.slice(last) });
+  });
+  return out;
+}
+
+function renderInline(line) {
+  // Build the line as finished HTML tokens so that once a chunk becomes an
+  // <img> or <a>, later passes never touch it again. Images go first so
+  // "![…](…)" is never re-parsed as a plain markdown link, then markdown
+  // links, then mentions, then bare URLs in whatever text remains.
+  let toks = splitTokens([{ t: "text", v: line }], IMG_MD, function (m) {
+    return { t: "img", url: m[2], alt: m[1] };
+  });
+  toks = splitTokens(toks, LINK_MD, function (m) {
+    return { t: "a", url: m[2], label: m[1] };
+  });
+  toks = splitTokens(toks, MENTION_RE, function (m) {
+    return { t: "mention", nick: m[1], url: m[2] };
+  });
+
+  return toks.map(function (tok) {
+    if (tok.t === "img") {
+      return '<img loading="lazy" src="' + attrEscape(tok.url) +
+             '" alt="' + attrEscape(tok.alt) + '">';
+    }
+    if (tok.t === "a") {
+      return '<a href="' + attrEscape(tok.url) + '" rel="noopener">' +
+             escapeHtml(tok.label || tok.url) + "</a>";
+    }
+    if (tok.t === "mention") {
+      // link the @nick to the mentioned feed; a nick-less @<url> mention
+      // falls back to the feed's host as its display name
+      return '<a href="' + attrEscape(tok.url) + '" rel="noopener">' +
+             escapeHtml("@" + (tok.nick || hostLabel(tok.url))) + "</a>";
+    }
+    // plain text: escape, then linkify bare URLs
+    let s = "";
+    let idx = 0;
+    let um;
+    URL_RE.lastIndex = 0;
+    while ((um = URL_RE.exec(tok.v)) !== null) {
+      s += escapeHtml(tok.v.slice(idx, um.index));
+      const url = um[0];
+      if (IMG_EXT.test(url)) {
+        s += '<img loading="lazy" src="' + attrEscape(url) + '" alt="">';
+      } else {
+        s += '<a href="' + attrEscape(url) + '" rel="noopener">' +
+             escapeHtml(url) + '</a>';
+      }
+      idx = URL_RE.lastIndex;
+    }
+    s += escapeHtml(tok.v.slice(idx));
+    return s;
+  }).join("");
+}
+
+/* A twt's text as safe HTML. Per the twtxt multiline extension, U+2028 is a
+   line break, so split on it and join the lines with <br> inside one <p>. A
+   blank line in the source is two U+2028 in a row, so it renders as an empty
+   line, exactly as it was typed. */
+function renderText(raw) {
+  return "<p>" + raw.split("\u2028").map(renderInline).join("<br>") + "</p>";
+}
+
+/* ---------- twt subject (reply marker) ----------
+   Per the Twt Subject extension, a reply names the conversation root's hash
+   as its first parenthesized token \u2014 "(#hash) text\u2026" \u2014 with nothing but
+   mentions and whitespace allowed before it. splitSubject() lifts that hash
+   off the twt so it can be shown as a compact reply marker instead of raw
+   noise. Display-only: hashes and RSS guids always use the untouched text. */
+function splitSubject(raw) {
+  const m = raw.match(/^((?:\s|@<[^<>]*>)*)\(#([a-z2-7]{12}|[a-z2-7]{7})\)[ \t]*/);
+  if (!m) return { hash: null, text: raw };
+  // m[1] keeps any mentions that preceded the subject
+  return { hash: m[2], text: (m[1] + raw.slice(m[0].length)).trim() };
+}
+
+/* the marker itself, shared by the page, the static export and the RSS
+   items; href points at the root post when we know where it is, null
+   renders a plain unlinked marker */
+function subjectHtml(hash, href) {
+  if (!hash) return "";
+  return '<p class="post-subject">' +
+         (href ? '<a href="' + attrEscape(href) + '">&#8617; in reply</a>'
+               : "&#8617; in reply") + "</p>";
+}
+
+/* the " · reply" link: opens ?editor with the given text pre-filled */
+function replyLinkHtml(seedText) {
+  return ' &middot; <a href="?editor&amp;text=' + encodeURIComponent(seedText) +
+         '">reply</a>';
+}
+
+/* ---------- relative time, exact time on hover ---------- */
+function relativeTime(date) {
+  const now = Date.now();
+  const diff = Math.round((now - date.getTime()) / 1000); // seconds
+  const abs = Math.abs(diff);
+  const table = [
+    [60, "second", 1],
+    [3600, "minute", 60],
+    [86400, "hour", 3600],
+    [604800, "day", 86400],
+    [2629800, "week", 604800],
+    [31557600, "month", 2629800],
+    [Infinity, "year", 31557600]
+  ];
+  if (abs < 45) return "just now";
+  for (const [limit, unit, div] of table) {
+    if (abs < limit) {
+      const n = Math.round(abs / div);
+      const plural = n === 1 ? "" : "s";
+      return diff >= 0 ? n + " " + unit + plural + " ago"
+                       : "in " + n + " " + unit + plural;
+    }
+  }
+  return date.toISOString();
+}
+
+/* ---------- parse the whole file ---------- */
+function parseFeed(txt) {
+  const meta = {};
+  const posts = [];
+  const lines = txt.split(/\r?\n/); // tolerate CRLF as well as LF endings
+  for (const line of lines) {
+    if (line.trim() === "") continue;
+    if (line.startsWith("#")) {
+      // metadata comment: "# key = value"
+      const mm = line.match(/^#\s*([A-Za-z0-9_-]+)\s*=\s*(.*)$/);
+      if (mm) {
+        const key = mm[1].toLowerCase();
+        const val = mm[2].trim();
+        // "# follow =" and "# link =" may repeat, so collect them into arrays.
+        // "# url =" is special: the twt-hash spec makes the FIRST url line the
+        // canonical feed URL, so keep the first if it somehow repeats. Every
+        // other field is single-valued (a later line overrides earlier).
+        if (key === "follow" || key === "link") (meta[key] = meta[key] || []).push(val);
+        else if (key === "url" && meta.url) { /* keep the first */ }
+        else meta[key] = val;
+      }
+      continue;
+    }
+    const tab = line.indexOf("\t");
+    if (tab === -1) continue; // not a valid post line
+    const timestamp = line.slice(0, tab).trim();
+    const text = line.slice(tab + 1);
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) continue;
+    posts.push({ timestamp, text, date: d });
+  }
+  return { meta, posts };
+}
+
+/* ---------- render the profile header ----------
+   Builds the header markup as a string shared by the live reader, the static
+   export and the timeline. Everything here is driven by twtxt.txt metadata. */
+function profileInnerHtml(meta) {
+  const nick = meta.nick || "twtxt feed";
+
+  let html = "";
+  if (meta.avatar) {
+    html += '<img class="profile-avatar" loading="lazy" src="' +
+            attrEscape(meta.avatar) + '" alt="">';
+  }
+  html += '<div class="profile-text">';
+  html += '<h1 class="profile-nick">' + escapeHtml(nick) + "</h1>";
+  if (meta.description) {
+    html += '<p class="profile-desc">' + escapeHtml(meta.description) + "</p>";
+  }
+
+  // Links row, fully data-driven: one line per "# link = <label> <url>" in
+  // twtxt.txt. The label may contain spaces, so split on the LAST space to
+  // isolate the URL; a line with no label shows the URL as its own text.
+  // (Want a follow link? Add e.g. "# link = Follow https://…/twtxt.txt".)
+  const linkParts = (meta.link || []).map(function (entry) {
+    const sp = entry.lastIndexOf(" ");
+    const label = sp > -1 ? entry.slice(0, sp).trim() : entry.trim();
+    const url = sp > -1 ? entry.slice(sp + 1).trim() : entry.trim();
+    return url ? '<a href="' + attrEscape(url) + '" rel="noopener">' +
+                 escapeHtml(label) + "</a>" : "";
+  }).filter(Boolean);
+
+  if (linkParts.length) {
+    html += '<p class="profile-links">' + linkParts.join(" &middot; ") + "</p>";
+  }
+  html += "</div>";
+  return html;
+}
+
+function renderProfile(meta) {
+  document.title = meta.nick || "twtxt feed";
+  document.getElementById("profile").innerHTML = profileInnerHtml(meta);
+}
+
+/* ---------- render one post ----------
+   Returns the <article> markup as a string, shared by the live reader and
+   the static export. absoluteTime=true prints a fixed human date (for the
+   no-JS export); otherwise a live "2 hours ago" that relies on this page's
+   JS. XML_MONTHS / pad2 (defined below) are initialised before either
+   caller runs. */
+function postArticleHtml(feedUrl, post, absoluteTime, knownHashes) {
+  const hash = twtHash(feedUrl, post.timestamp, post.text);
+  const sub = splitSubject(post.text);
+  let timeInner;
+  if (absoluteTime) {
+    timeInner = '<time datetime="' + attrEscape(post.timestamp) + '">' +
+                escapeHtml(formatAbsolute(post.date)) + "</time>";
+  } else {
+    timeInner = '<time datetime="' + attrEscape(post.timestamp) + '" title="' +
+                attrEscape(post.date.toString()) + '">' +
+                escapeHtml(relativeTime(post.date)) + "</time>";
+  }
+  // "reply" opens ?editor with the subject pre-filled. Replying continues
+  // the conversation, so reuse this post's root hash if it is itself a
+  // reply. The static (no-JS) export skips this — it needs the live app.
+  const replyLink = absoluteTime ? "" :
+    replyLinkHtml("(#" + (sub.hash || hash) + ") ");
+  const rootHref = knownHashes && knownHashes.has(sub.hash) ? "#" + sub.hash : null;
+  return '<article class="post" id="' + hash + '">' +
+           '<div class="post-body">' +
+             subjectHtml(sub.hash, rootHref) +
+             renderText(sub.text) + "</div>" +
+           '<div class="post-meta"><a href="#' + hash + '">' + timeInner + "</a>" +
+             replyLink + "</div>" +
+         "</article>";
+}
+
+/* human-readable absolute date in the exporting browser's local time */
+function formatAbsolute(date) {
+  return XML_MONTHS[date.getMonth()] + " " + date.getDate() + ", " + date.getFullYear() +
+         ", " + pad2(date.getHours()) + ":" + pad2(date.getMinutes());
+}
+
+/* ---------- render the feed ---------- */
+
+/* Archive Feeds extension: "# prev = <hash> <filename>" points at the
+   previous, rotated-out feed file, relative to the feed's own URL. */
+function prevArchiveUrl(meta, feedUrl) {
+  if (!meta || !meta.prev) return null;
+  const sp = meta.prev.search(/\s/);
+  const fname = (sp === -1 ? meta.prev : meta.prev.slice(sp + 1)).trim();
+  try { return fname ? new URL(fname, feedUrl).href : null; }
+  catch (e) { return null; }
+}
+
+let didHashJump = false; // only auto-scroll to a permalink once per visit
+
+function renderFeed(feedUrl, posts, meta, metaUrl) {
+  const feed = document.getElementById("feed");
+  if (posts.length === 0) {
+    feed.innerHTML = '<p class="notice">No posts yet.</p>';
+    return;
+  }
+  // newest first; drop duplicates by hash (an imperfect rotation can leave
+  // the same twt in both the main feed and an archive). The surviving set
+  // doubles as "every hash on this page" for the reply markers.
+  posts.sort(function (a, b) { return b.date - a.date; });
+  const known = new Set();
+  posts = posts.filter(function (p) {
+    const h = twtHash(feedUrl, p.timestamp, p.text);
+    if (known.has(h)) return false;
+    known.add(h);
+    return true;
+  });
+  let html = posts.map(function (post) {
+    return postArticleHtml(feedUrl, post, false, known);
+  }).join("");
+
+  // Offer to walk the archive chain. "# prev" is relative to the file that
+  // declares it (metaUrl), while hashes always use the canonical feed URL —
+  // archives carry the same "# url" per the spec.
+  const archiveUrl = prevArchiveUrl(meta, metaUrl || feedUrl);
+  if (archiveUrl) {
+    html += '<p class="notice" style="padding:0.5em 0"><a id="load-older" href="#">' +
+            "Load older posts from the archive</a></p>";
+  }
+  feed.innerHTML = html;
+  if (archiveUrl) {
+    document.getElementById("load-older").addEventListener("click", function (e) {
+      e.preventDefault();
+      e.target.textContent = "Loading older posts…";
+      fetch(archiveUrl, { cache: "no-cache" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.text();
+        })
+        .then(function (txt) {
+          const p = parseFeed(txt);
+          // re-render with the archive merged in; its own "# prev" (if any)
+          // keeps the load-older link alive — resolved against THIS archive's
+          // URL, so chains across subdirectories walk correctly
+          renderFeed(feedUrl, posts.concat(p.posts), p.meta, archiveUrl);
+        })
+        .catch(function (err) {
+          e.target.textContent = "Couldn't load the archive (" + err.message + ")";
+        });
+    });
+  }
+
+  // if we arrived via a permalink, jump to it now that posts exist
+  if (location.hash && !didHashJump) {
+    const target = document.getElementById(location.hash.slice(1));
+    if (target) { target.scrollIntoView(); didHashJump = true; }
+  }
+}
+
+/* ============================================================
+   RSS FEED GENERATION
+   Visiting  index.html?feed  turns this page into a one-off
+   builder: it reuses the very same parseFeed / twtHash /
+   renderText functions above to emit a complete feed.xml for
+   you to paste into the feed.xml file. Because it shares that
+   logic, the feed can never drift from what the page itself
+   shows — twtxt.txt stays the single source of truth.
+   ============================================================ */
+/* which mode the query string asks for: ?editor ?static ?feed ?timeline
+   (default: the normal reader). Matches ?x, ?x=1, ?foo&x, etc. */
+function pageMode() {
+  const q = location.search;
+  if (/(^|[?&])editor(=|&|$)/.test(q))   return "editor";
+  if (/(^|[?&])static(=|&|$)/.test(q))   return "static";
+  if (/(^|[?&])timeline(=|&|$)/.test(q)) return "timeline";
+  if (/(^|[?&])feed(=|&|$)/.test(q))     return "feed";
+  return "reader";
+}
+
+const XML_DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const XML_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+/* RSS pubDate is RFC-822; emit it in UTC (+0000) so it's unambiguous. */
+function rfc822(date) {
+  return XML_DAYS[date.getUTCDay()] + ", " + pad2(date.getUTCDate()) + " " +
+         XML_MONTHS[date.getUTCMonth()] + " " + date.getUTCFullYear() + " " +
+         pad2(date.getUTCHours()) + ":" + pad2(date.getUTCMinutes()) + ":" +
+         pad2(date.getUTCSeconds()) + " +0000";
+}
+
+function xmlEscape(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/* wrap already-rendered HTML; split any "]]>" so it can't close CDATA early */
+function cdata(html) {
+  return "<![CDATA[" + String(html).replace(/]]>/g, "]]]]><![CDATA[>") + "]]>";
+}
+
+function buildRssFeed(meta, posts, feedUrl) {
+  const siteRoot = new URL(".", feedUrl).href;        // e.g. https://gabesarcade.com/
+  const feedXmlUrl = new URL("feed.xml", feedUrl).href;
+  const channelTitle = meta.nick || "twtxt feed";
+  const channelDesc = meta.description || channelTitle;
+
+  const ordered = posts.slice().sort(function (a, b) { return b.date - a.date; });
+  const known = new Set(ordered.map(function (p) {
+    return twtHash(feedUrl, p.timestamp, p.text);
+  }));
+  const items = ordered.map(function (post) {
+    // same hash the page uses for its permalinks, so feed ids match anchors
+    const permalink = siteRoot + "#" + twtHash(feedUrl, post.timestamp, post.text);
+    // replies: drop the raw "(#hash)" subject from the shown content; link
+    // the conversation root only when it is one of our own posts, so the
+    // feed never points readers at an anchor that doesn't exist
+    const sub = splitSubject(post.text);
+    const rootHref = known.has(sub.hash) ? siteRoot + "#" + sub.hash : null;
+    const bodyHtml = subjectHtml(sub.hash, rootHref) + renderText(sub.text);
+    return "" +
+      "<item>" +
+        // No <title>: Micro.blog treats title-less items as microposts and
+        // crossposts the post's content itself, not a "title -> link".
+        "<link>" + xmlEscape(permalink) + "</link>" +
+        '<guid isPermaLink="true">' + xmlEscape(permalink) + "</guid>" +
+        "<pubDate>" + rfc822(post.date) + "</pubDate>" +
+        "<description>" + cdata(bodyHtml) + "</description>" +
+      "</item>";
+  }).join("\n");
+
+  return '<?xml version="1.0" encoding="utf-8"?>\n' +
+    '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n' +
+    "<channel>\n" +
+    "<title>" + xmlEscape(channelTitle) + "</title>\n" +
+    "<link>" + xmlEscape(siteRoot) + "</link>\n" +
+    "<description>" + xmlEscape(channelDesc) + "</description>\n" +
+    '<atom:link href="' + xmlEscape(feedXmlUrl) + '" rel="self" type="application/rss+xml"/>\n' +
+    "<lastBuildDate>" + rfc822(new Date()) + "</lastBuildDate>\n" +
+    items + "\n" +
+    "</channel>\n</rss>\n";
+}
+
+/* ============================================================
+   MODE UIs — export panels (?feed, ?static), the composer
+   (?editor) and the offline drag-and-drop fallback. All reuse
+   the page's own theme CSS variables so they follow light/dark.
+   ============================================================ */
+const BTN_STYLE = "font-family:var(--bodyfont);font-size:1em;padding:0.3em 0.8em";
+const FIELD_STYLE = "width:100%;box-sizing:border-box;font-family:var(--monofont);font-size:1em";
+
+/* Shared export panel: heading, note, Copy + Download, and a read-only
+   textarea holding the generated file. Used by ?feed and ?static. */
+function showExport(opts) {
+  document.title = opts.docTitle;
+  document.body.innerHTML =
+    '<h1 style="font-size:1.4em;border-bottom:2px solid var(--fg);padding-bottom:0.2em">' +
+      opts.heading + "</h1>" +
+    "<p>" + opts.noteHtml + "</p>" +
+    '<p><button id="exp-copy" style="' + BTN_STYLE + '">Copy</button> ' +
+      '<a id="exp-dl" download="' + opts.filename + '" style="margin-left:0.5em">Download ' +
+      opts.filename + "</a> " +
+      '<span id="exp-status" class="notice"></span></p>' +
+    '<textarea id="exp-out" readonly style="width:100%;height:60vh;box-sizing:border-box;' +
+      'font-family:var(--monofont);font-size:0.9em;background:var(--bg);color:var(--fg);' +
+      'border:1px solid var(--rule)"></textarea>';
+  const ta = document.getElementById("exp-out");
+  ta.value = opts.content;
+  document.getElementById("exp-dl").href =
+    URL.createObjectURL(new Blob([opts.content], { type: opts.mime }));
+  document.getElementById("exp-copy").addEventListener("click", function () {
+    ta.select();
+    const status = document.getElementById("exp-status");
+    navigator.clipboard.writeText(ta.value).then(function () {
+      status.textContent = "Copied.";
+    }, function () {
+      status.textContent = "Select the text and copy manually.";
+    });
+  });
+}
+
+/* ?feed — rebuild feed.xml from twtxt.txt */
+function showFeedGenerator(meta, posts, feedUrl) {
+  showExport({
+    docTitle: "feed.xml builder",
+    heading: "feed.xml builder",
+    noteHtml: "The complete <code>feed.xml</code>, rebuilt from <code>twtxt.txt</code>. " +
+      "Copy or download it, save it as <code>feed.xml</code> in your site, then publish. " +
+      '<a href="./">Back to the feed</a>.',
+    filename: "feed.xml",
+    mime: "application/rss+xml;charset=utf-8",
+    content: buildRssFeed(meta, posts, feedUrl)
+  });
+}
+
+/* ?static — a complete JavaScript-free copy of the site (plain HTML + CSS).
+   Reuses the page's own <style> and the shared profile/post renderers, so
+   the export always matches what the live page shows. Dates are absolute
+   because there is no JS to keep "2 hours ago" fresh; permalinks still work
+   through native #anchors and the existing .post:target CSS. */
+function buildStaticSite(meta, posts, feedUrl) {
+  const css = document.querySelector("style").textContent;
+  const nick = meta.nick || "twtxt feed";
+  const ordered = posts.slice().sort(function (a, b) { return b.date - a.date; });
+  const known = new Set(ordered.map(function (p) {
+    return twtHash(feedUrl, p.timestamp, p.text);
+  }));
+  const articles = ordered.map(function (post) {
+    return postArticleHtml(feedUrl, post, true, known);
+  }).join("\n");
+  return '<!DOCTYPE html>\n<html lang="en">\n<head>\n' +
+    '<meta charset="UTF-8">\n' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+    "<title>" + escapeHtml(nick) + "</title>\n" +
+    '<link rel="alternate" type="application/rss+xml" title="RSS" href="feed.xml">\n' +
+    '<link rel="alternate" type="text/plain" title="twtxt" href="twtxt.txt">\n' +
+    "<style>" + css + "</style>\n" +
+    "</head>\n<body>\n" +
+    '<header class="profile">' + profileInnerHtml(meta) + "</header>\n" +
+    '<main id="feed">\n' + articles + "\n</main>\n" +
+    "</body>\n</html>\n";
+}
+
+function showStaticExport(meta, posts, feedUrl) {
+  showExport({
+    docTitle: "static site export",
+    heading: "static site export",
+    noteHtml: "A complete <strong>JavaScript-free</strong> copy of your site — just HTML and " +
+      "CSS, with your posts baked in. Save it as your <code>index.html</code> to serve a no-JS " +
+      "site; re-export whenever you add a post. " +
+      '<a href="./">Back to the feed</a>.',
+    filename: "index.html",
+    mime: "text/html;charset=utf-8",
+    content: buildStaticSite(meta, posts, feedUrl)
+  });
+}
+
+/* ?editor — the twtxt composer, folded in from the old twtxt.html. It needs
+   no feed data, so the bootstrap runs it without fetching (works offline). */
+function rfc3339(date) {
+  const off = -date.getTimezoneOffset();
+  const sign = off >= 0 ? "+" : "-";
+  const abs = Math.abs(off);
+  return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate()) +
+         "T" + pad2(date.getHours()) + ":" + pad2(date.getMinutes()) + ":" + pad2(date.getSeconds()) +
+         sign + pad2(Math.floor(abs / 60)) + ":" + pad2(abs % 60);
+}
+
+function showEditor() {
+  document.title = "twtxt composer";
+  document.body.innerHTML =
+    '<h1 style="font-size:1.4em;border-bottom:2px solid var(--fg);padding-bottom:0.2em">twtxt composer</h1>' +
+    "<p>Writes one correctly-formatted line for <code>twtxt.txt</code>: a timestamp, a tab, " +
+      "then your post (paragraph breaks become the separator twtxt expects). " +
+      '<a href="./">Back to the feed</a>.</p>' +
+    '<p style="font-weight:bold;margin-bottom:0.2em"><label for="ed-ts">Timestamp (RFC 3339)</label></p>' +
+    '<input id="ed-ts" type="text" style="' + FIELD_STYLE + '">' +
+    '<p><button id="ed-now" style="' + BTN_STYLE + '">Use current time</button> ' +
+      '<span class="notice">Only change this to backdate a post.</span></p>' +
+    '<p style="font-weight:bold;margin-bottom:0.2em"><label for="ed-post">Your post</label></p>' +
+    '<textarea id="ed-post" style="' + FIELD_STYLE + ';height:8em" ' +
+      'placeholder="Write your post. Press Enter for a new paragraph. Links and image URLs can be pasted in as plain text."></textarea>' +
+    '<p><button id="ed-gen" style="' + BTN_STYLE + '">Generate line</button></p>' +
+    '<p style="font-weight:bold;margin-bottom:0.2em"><label for="ed-out">Result — paste as a new line at the end of twtxt.txt</label></p>' +
+    '<textarea id="ed-out" readonly style="' + FIELD_STYLE + ';height:5em"></textarea>' +
+    '<p><button id="ed-copy" style="' + BTN_STYLE + '">Copy to clipboard</button> ' +
+      '<span id="ed-status" class="notice"></span></p>';
+
+  const ts = document.getElementById("ed-ts");
+  const status = document.getElementById("ed-status");
+  function setNow() { ts.value = rfc3339(new Date()); }
+  setNow();
+  document.getElementById("ed-now").addEventListener("click", setNow);
+
+  // ?editor&text=… pre-fills the post box; the "reply" links on posts use
+  // this to seed the "(#hash)" subject (and @<nick url> mention) for you.
+  const postBox = document.getElementById("ed-post");
+  const prefill = new URLSearchParams(location.search).get("text");
+  if (prefill) postBox.value = prefill;
+  postBox.focus();
+  postBox.setSelectionRange(postBox.value.length, postBox.value.length);
+
+  document.getElementById("ed-gen").addEventListener("click", function () {
+    // Each line break -> one U+2028 (twtxt Multiline Extension), keeping the twt
+    // on a single physical line; a blank line becomes two U+2028, as typed.
+    const text = document.getElementById("ed-post").value
+      .replace(/\r\n?/g, "\n")   // normalise CRLF / lone CR to LF
+      .replace(/\n/g, "\u2028")   // every line break becomes the separator
+      .trim();
+    document.getElementById("ed-out").value = ts.value.trim() + "\t" + text;
+    status.textContent = "";
+  });
+
+  document.getElementById("ed-copy").addEventListener("click", function () {
+    const out = document.getElementById("ed-out");
+    out.select();
+    navigator.clipboard.writeText(out.value).then(function () {
+      status.textContent = "Copied.";
+    }, function () {
+      status.textContent = "Couldn't copy automatically — select the text and copy manually.";
+    });
+  });
+}
+
+/* Offline fallback: when the feed can't be fetched (e.g. the page is opened
+   as a local file://), let the visitor drop twtxt.txt onto the page to read
+   it. Called from the bootstrap's .catch. */
+function showDropFallback(err) {
+  const feed = document.getElementById("feed");
+  feed.innerHTML =
+    '<p class="notice">Could not load ' + FEED_URL + " (" + escapeHtml(String(err.message)) + ").</p>" +
+    '<div id="dropzone" style="border:2px dashed var(--rule);border-radius:6px;padding:2em;' +
+      'text-align:center;color:var(--muted)">' +
+      '<p style="margin:0 0 0.5em">Drop your <code>twtxt.txt</code> anywhere on this page to read it,</p>' +
+      '<p style="margin:0">or <label style="color:var(--accent);text-decoration:underline;cursor:pointer">' +
+        'choose a file<input id="dropfile" type="file" accept=".txt,text/plain" style="display:none"></label>.</p>' +
+    "</div>";
+
+  function renderFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = function () {
+      const parsed = parseFeed(String(reader.result));
+      const feedUrl = parsed.meta.url || FEED_URL;
+      // honour the requested mode (?feed / ?static / reader) with the dropped file
+      renderForMode(parsed.meta, parsed.posts, feedUrl);
+    };
+    reader.readAsText(file);
+  }
+
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("drop", function (e) {
+    e.preventDefault();
+    if (e.dataTransfer && e.dataTransfer.files[0]) renderFromFile(e.dataTransfer.files[0]);
+  });
+  document.getElementById("dropfile").addEventListener("change", function (e) {
+    if (e.target.files[0]) renderFromFile(e.target.files[0]);
+  });
+}
+
+/* ============================================================
+   ?timeline — a reader that merges the feeds listed as
+   "# follow = nick url" in twtxt.txt into one stream. It runs
+   in the browser, so a followed feed only loads if that feed's
+   own website permits cross-site reads; when one can't be
+   loaded we explain why in plain language instead of failing
+   silently. See the note in the feed-hash comment above about
+   why these ids stay ecosystem-correct across feeds. */
+
+/* how many posts the timeline shows (one place to tune) */
+const TIMELINE_MAX_ITEMS = 100;    // total across all feeds, newest first
+const TIMELINE_MAX_PER_FEED = 20;  // newest kept from each feed before merging
+
+/* short human label for a feed URL, e.g. "example.com" */
+function hostLabel(url) {
+  try { return new URL(url).host; } catch (e) { return url; }
+}
+
+/* Followed feeds are third-party data, so any URL of theirs that becomes a
+   link target must be a real web address — never javascript:, data:, etc.
+   Returns the normalized URL, or null if it isn't plain http(s). */
+function httpUrl(u) {
+  try {
+    const p = new URL(u);
+    return (p.protocol === "http:" || p.protocol === "https:") ? p.href : null;
+  } catch (e) { return null; }
+}
+
+/* turn the collected "# follow = nick url" lines into [{ nick, url }].
+   nick is the first token; the URL is the rest (a bare URL is allowed). */
+function followEntries(meta) {
+  return (meta.follow || []).map(function (line) {
+    const t = line.trim();
+    const sp = t.search(/\s/);
+    if (sp === -1) return { nick: hostLabel(t), url: t };
+    return { nick: t.slice(0, sp), url: t.slice(sp + 1).trim() };
+  }).filter(function (f) { return f.url; });
+}
+
+/* Load one followed feed. ALWAYS resolves (never rejects): either
+   { nick, url, total, items } on success, or { nick, url, error }
+   where error is a plain-language explanation the reader can show. */
+function loadFollowFeed(nick, url) {
+  let parsed;
+  try { parsed = new URL(url); }
+  catch (e) {
+    return Promise.resolve({ nick: nick, url: url,
+      error: "This isn’t a valid web address, so it can’t be followed." });
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return Promise.resolve({ nick: nick, url: url,
+      error: "Only web addresses (starting with “https” or “http”) can be followed." });
+  }
+  if (parsed.protocol === "http:" && location.protocol === "https:") {
+    return Promise.resolve({ nick: nick, url: url,
+      error: "This feed’s address starts with “http”, not “https”. For safety, a " +
+             "secure site can’t open those. If the feed offers an “https” link, follow that one." });
+  }
+  return fetch(url, { cache: "no-cache" })
+    .then(function (r) {
+      if (!r.ok) throw { httpStatus: r.status };
+      return r.text();
+    })
+    .then(function (txt) {
+      const p = parseFeed(txt);
+      // the feed's own "# url" is third-party data: only honour it when it
+      // is a plain web URL, else keep the address we actually fetched
+      const feedUrl = httpUrl(p.meta.url) || url;
+      const displayNick = nick || p.meta.nick || hostLabel(url);
+      if (p.posts.length === 0) {
+        return { nick: displayNick, url: url,
+          error: "This feed loaded, but doesn’t have any posts yet." };
+      }
+      // keep only this feed's newest posts so one busy feed can't crowd out the rest
+      const items = p.posts.slice()
+        .sort(function (a, b) { return b.date - a.date; })
+        .slice(0, TIMELINE_MAX_PER_FEED)
+        .map(function (post) {
+          return { post: post, nick: displayNick, feedUrl: feedUrl };
+        });
+      return { nick: displayNick, url: url,
+               total: p.posts.length, items: items };
+    })
+    .catch(function (e) {
+      if (e && typeof e.httpStatus === "number") {
+        if (e.httpStatus === 404) {
+          return { nick: nick, url: url,
+            error: "We couldn’t find a feed at that address (it came back “not found”)." };
+        }
+        return { nick: nick, url: url,
+          error: "This feed’s website reported a problem (error " + e.httpStatus +
+                 "), so it couldn’t be read just now." };
+      }
+      // A rejected fetch is opaque on purpose — the browser won’t tell us whether
+      // the feed refused cross-site reads or the site is simply offline. Cover both.
+      return { nick: nick, url: url,
+        error: "This feed’s website didn’t allow other sites to read it, or it may be " +
+               "offline right now. That’s common for twtxt feeds and isn’t anything you " +
+               "did — it still works in a dedicated feed-reader app." };
+    });
+}
+
+/* one merged-timeline post, attributed to the feed it came from; the nick
+   links to the feed's twtxt.txt itself — the one address a twtxt feed is
+   guaranteed to have (its site root may not be a real page) */
+function timelineItemHtml(entry, knownHashes) {
+  const hash = twtHash(entry.feedUrl, entry.post.timestamp, entry.post.text);
+  const sub = splitSubject(entry.post.text);
+  const via = '<a href="' + attrEscape(entry.feedUrl) + '" rel="noopener">' +
+              escapeHtml(entry.nick) + "</a>";
+  // reply seeds the composer with the conversation root and the author's
+  // mention, ready to paste into twtxt.txt once written
+  const replyText = "(#" + (sub.hash || hash) + ") @<" + entry.nick + " " +
+                    entry.feedUrl + "> ";
+  const rootHref = knownHashes && knownHashes.has(sub.hash) ? "#" + sub.hash : null;
+  return '<article class="post" id="' + hash + '">' +
+           '<div class="post-body">' +
+             subjectHtml(sub.hash, rootHref) +
+             renderText(sub.text) + "</div>" +
+           '<div class="post-meta">via ' + via + " &middot; " +
+             '<time datetime="' + attrEscape(entry.post.timestamp) + '" title="' +
+             attrEscape(entry.post.date.toString()) + '">' +
+             escapeHtml(relativeTime(entry.post.date)) + "</time>" +
+             replyLinkHtml(replyText) +
+           "</div>" +
+         "</article>";
+}
+
+/* a collapsible per-feed load report, so failures are visible with a reason;
+   each feed's name links to its twtxt.txt */
+function followStatusHtml(results) {
+  const rows = results.map(function (res) {
+    // a rejected follow URL may have a hostile scheme — only link web URLs
+    const safe = httpUrl(res.url);
+    const label = escapeHtml(res.nick || hostLabel(res.url));
+    const name = "<strong>" +
+      (safe ? '<a href="' + attrEscape(safe) + '" rel="noopener">' + label + "</a>"
+            : label) + "</strong>";
+    if (res.error) {
+      return '<li style="margin:0.5em 0">' + name + " couldn’t be loaded. " +
+             escapeHtml(res.error) + "</li>";
+    }
+    const total = res.total, shown = res.items.length;
+    const extra = shown < total ? " (showing latest " + shown + ")" : "";
+    return '<li style="margin:0.5em 0;color:var(--muted)">' + name + " — " +
+           total + " post" + (total === 1 ? "" : "s") + extra + "</li>";
+  }).join("");
+  const loaded = results.filter(function (r) { return !r.error; }).length;
+  return '<details style="margin:1.5em 0;border-top:1px solid var(--rule);padding-top:1em">' +
+           "<summary>Following " + results.length + " feed" +
+           (results.length === 1 ? "" : "s") + " — " + loaded + " loaded</summary>" +
+           '<ul style="list-style:none;padding:0;margin:0.8em 0">' + rows + "</ul>" +
+         "</details>";
+}
+
+/* ?timeline — fetch every followed feed, merge newest-first, and show a
+   per-feed status report. ownPosts and feedUrl are unused: a timeline needs
+   neither, but the dispatcher hands every mode a uniform (meta, posts, feedUrl). */
+function showTimeline(meta, ownPosts, feedUrl) {
+  const follows = followEntries(meta);
+  const feed = document.getElementById("feed");
+  document.getElementById("profile").innerHTML = profileInnerHtml(meta);
+  document.title = (meta.nick || "twtxt") + " — timeline";
+
+  if (follows.length === 0) {
+    feed.innerHTML = '<p class="notice">No feeds followed yet. Add lines like ' +
+      "<code># follow = alice https://alice.example/twtxt.txt</code> to your " +
+      "<code>twtxt.txt</code>, then reload this page.</p>";
+    return;
+  }
+
+  feed.innerHTML = '<p class="notice">Loading ' + follows.length + " feed" +
+    (follows.length === 1 ? "" : "s") + "…</p>";
+
+  Promise.all(follows.map(function (f) { return loadFollowFeed(f.nick, f.url); }))
+    .then(function (results) {
+      const items = [];
+      results.forEach(function (res) {
+        if (res.items) Array.prototype.push.apply(items, res.items);
+      });
+      items.sort(function (a, b) { return b.post.date - a.post.date; });
+      const shown = items.slice(0, TIMELINE_MAX_ITEMS);
+
+      const intro = '<p class="notice" style="font-style:normal">Posts from the feeds ' +
+        escapeHtml(meta.nick || "this site") + " follows.</p>";
+      const capNote = items.length > TIMELINE_MAX_ITEMS
+        ? '<p class="notice">Showing the ' + TIMELINE_MAX_ITEMS +
+          " most recent posts of " + items.length + ".</p>"
+        : "";
+      const shownHashes = new Set(shown.map(function (it) {
+        return twtHash(it.feedUrl, it.post.timestamp, it.post.text);
+      }));
+      const stream = shown.length
+        ? shown.map(function (it) { return timelineItemHtml(it, shownHashes); }).join("")
+        : '<p class="notice">No posts to show from the feeds that loaded.</p>';
+      feed.innerHTML = intro + capNote + followStatusHtml(results) + stream;
+    });
+}
+
+/* ---------- go ---------- */
+const MODE = pageMode();
+
+/* Render the page for the active mode. Shared by the network path and the
+   offline drop fallback, so ?feed and ?static work offline (via drag-drop). */
+function renderForMode(meta, posts, feedUrl, fetchedFrom) {
+  if (MODE === "feed") {
+    showFeedGenerator(meta, posts, feedUrl);
+  } else if (MODE === "static") {
+    showStaticExport(meta, posts, feedUrl);
+  } else if (MODE === "timeline") {
+    showTimeline(meta, posts, feedUrl);
+  } else {
+    renderProfile(meta);
+    // fetchedFrom (where twtxt.txt was really loaded from) anchors archive
+    // fetches, so "# prev" works even when previewing away from # url
+    renderFeed(feedUrl, posts, meta, fetchedFrom);
+  }
+}
+
+if (MODE === "editor") {
+  // the composer needs no feed data, so don't fetch — works offline
+  showEditor();
+} else {
+  fetch(FEED_URL, { cache: "no-cache" })
+    .then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.text();
+    })
+    .then(function (txt) {
+      const { meta, posts } = parseFeed(txt);
+      // the feed's canonical URL comes from the file itself (# url = ...);
+      // fall back to this page's location if it's missing.
+      const fetchedFrom = new URL(FEED_URL, location.href).href;
+      const feedUrl = meta.url || fetchedFrom;
+      renderForMode(meta, posts, feedUrl, fetchedFrom);
+    })
+    .catch(showDropFallback);
+}
+</script>
+
+</body>
+</html>
