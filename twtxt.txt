@@ -27,3 +27,4 @@
 2026-07-04T21:26:02Z	(#ctarv2hknntf) Whoops 😬!
 2026-07-04T21:54:31Z	(#lleeypvkzbw2) 🎉 I was looking for a client and this was so easy to get set up with. Really like it so far. I was able to get setup on my desktop and mobile devices seamlessly. I can’t quite wrap my mind around that magic. Great work! Only hiccups I’m encountering is my feed isn’t quite chronological.
 2026-07-04T21:56:14Z	(#lleeypvkzbw2) Actually, I think I know what’s happening. The last twt in the thread is more recent than the original twt, so it appears out of order.
+2026-07-04T23:03:12Z	(#f5koec3hvqmb) It’s definitely possible. I tried to keep everything the same, but there was some funkiness I did when I was in GitHub. Would that also explain why some of my posts show up twice in twtxt.net when replying?
