@@ -145,11 +145,18 @@
    - reads the # metadata header for the profile
    - renders posts newest-first
    - each post gets a permalink whose id is the twtxt "twt hash"
-     (Blake2b-256 of url\n timestamp\n text, base32, lowercased,
-      last 7 chars) so the ids match the wider twtxt ecosystem.
+     (Blake2b-256 of url\n timestamp\n text, base32, lowercased;
+      v1 keeps the LAST 7 chars, v2 — twts from 2026-07-01 on —
+      keeps the FIRST 12) so the ids match the wider twtxt ecosystem.
    ------------------------------------------------------------------ */
 
 const FEED_URL = "twtxt.txt"; // lives in the site root, alongside this page
+
+/* Bump this date whenever you edit this file. It is shown on the ?feed and
+   ?static builder pages and stamped into the generated feed.xml, so output
+   accidentally built by a stale cached copy of this page is recognisable
+   at a glance — before it gets committed. */
+const GENERATOR = "index.html 2026-07-05";
 
 /* ---------- twt hash ----------
    Each post's id is the twtxt "twt hash": Blake2b-256 of
@@ -317,7 +324,8 @@ function escapeHtml(s) {
    - links:    [text](url) markdown links and bare http(s) URLs -> <a>
    - mentions: @<nick url> (twtxt mention syntax)  ->  <a>@nick</a>
    - line breaks: U+2028 (twtxt multiline separator) -> <br>
-   Order matters: escape first, then linkify on the escaped string.
+   Order matters: the raw text is tokenized in passes (images, then links,
+   then mentions), and each token is escaped as it is rendered to HTML.
    The URL patterns exclude ">" so a URL written inside angle brackets
    (like a mention) doesn't swallow the closing bracket. */
 const IMG_MD = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
@@ -369,17 +377,17 @@ function renderInline(line) {
 
   return toks.map(function (tok) {
     if (tok.t === "img") {
-      return '<img loading="lazy" src="' + attrEscape(tok.url) +
+      return '<img loading="lazy" referrerpolicy="no-referrer" src="' + attrEscape(tok.url) +
              '" alt="' + attrEscape(tok.alt) + '">';
     }
     if (tok.t === "a") {
-      return '<a href="' + attrEscape(tok.url) + '" rel="noopener">' +
+      return '<a href="' + attrEscape(tok.url) + '" rel="noopener noreferrer">' +
              escapeHtml(tok.label || tok.url) + "</a>";
     }
     if (tok.t === "mention") {
       // link the @nick to the mentioned feed; a nick-less @<url> mention
       // falls back to the feed's host as its display name
-      return '<a href="' + attrEscape(tok.url) + '" rel="noopener">' +
+      return '<a href="' + attrEscape(tok.url) + '" rel="noopener noreferrer">' +
              escapeHtml("@" + (tok.nick || hostLabel(tok.url))) + "</a>";
     }
     // plain text: escape, then linkify bare URLs
@@ -391,9 +399,9 @@ function renderInline(line) {
       s += escapeHtml(tok.v.slice(idx, um.index));
       const url = um[0];
       if (IMG_EXT.test(url)) {
-        s += '<img loading="lazy" src="' + attrEscape(url) + '" alt="">';
+        s += '<img loading="lazy" referrerpolicy="no-referrer" src="' + attrEscape(url) + '" alt="">';
       } else {
-        s += '<a href="' + attrEscape(url) + '" rel="noopener">' +
+        s += '<a href="' + attrEscape(url) + '" rel="noopener noreferrer">' +
              escapeHtml(url) + '</a>';
       }
       idx = URL_RE.lastIndex;
@@ -438,7 +446,7 @@ function subjectHtml(hash, href) {
   if (!hash) return "";
   const target = href || TWTXT_ABOUT;
   return '<p class="post-subject"><a href="' + attrEscape(target) +
-         '" rel="noopener">&#8617; twtxt reply</a></p>';
+         '" rel="noopener noreferrer">&#8617; twtxt reply</a></p>';
 }
 
 /* the " · reply" link: opens ?editor with the given text pre-filled */
@@ -473,10 +481,14 @@ function relativeTime(date) {
   return date.toISOString();
 }
 
-/* ---------- parse the whole file ---------- */
+/* ---------- parse the whole file ----------
+   skipped counts lines that look like posts but couldn't be read (no tab,
+   or an unparseable timestamp). The reader and the export pages surface it,
+   so a hand-editing slip never silently loses a post. */
 function parseFeed(txt) {
   const meta = {};
   const posts = [];
+  let skipped = 0;
   const lines = txt.split(/\r?\n/); // tolerate CRLF as well as LF endings
   for (const line of lines) {
     if (line.trim() === "") continue;
@@ -497,14 +509,14 @@ function parseFeed(txt) {
       continue;
     }
     const tab = line.indexOf("\t");
-    if (tab === -1) continue; // not a valid post line
+    if (tab === -1) { skipped++; continue; } // no tab: not a valid post line
     const timestamp = line.slice(0, tab).trim();
     const text = line.slice(tab + 1);
     const d = new Date(timestamp);
-    if (isNaN(d.getTime())) continue;
+    if (isNaN(d.getTime())) { skipped++; continue; }
     posts.push({ timestamp, text, date: d });
   }
-  return { meta, posts };
+  return { meta, posts, skipped };
 }
 
 /* ---------- render the profile header ----------
@@ -532,7 +544,7 @@ function profileInnerHtml(meta) {
     const sp = entry.lastIndexOf(" ");
     const label = sp > -1 ? entry.slice(0, sp).trim() : entry.trim();
     const url = sp > -1 ? entry.slice(sp + 1).trim() : entry.trim();
-    return url ? '<a href="' + attrEscape(url) + '" rel="noopener">' +
+    return url ? '<a href="' + attrEscape(url) + '" rel="noopener noreferrer">' +
                  escapeHtml(label) + "</a>" : "";
   }).filter(Boolean);
 
@@ -732,14 +744,20 @@ function buildRssFeed(meta, posts, feedUrl) {
       "</item>";
   }).join("\n");
 
+  // lastBuildDate is the newest post's date, NOT "now": rebuilding an
+  // unchanged feed yields a byte-identical file, so any diff in feed.xml
+  // means the content really changed. The comment on line 2 records which
+  // version of this page built the file (see GENERATOR above).
+  const built = ordered.length ? ordered[0].date : new Date();
   return '<?xml version="1.0" encoding="utf-8"?>\n' +
+    "<!-- built by " + GENERATOR + " -->\n" +
     '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n' +
     "<channel>\n" +
     "<title>" + xmlEscape(channelTitle) + "</title>\n" +
     "<link>" + xmlEscape(siteRoot) + "</link>\n" +
     "<description>" + xmlEscape(channelDesc) + "</description>\n" +
     '<atom:link href="' + xmlEscape(feedXmlUrl) + '" rel="self" type="application/rss+xml"/>\n' +
-    "<lastBuildDate>" + rfc822(new Date()) + "</lastBuildDate>\n" +
+    "<lastBuildDate>" + rfc822(built) + "</lastBuildDate>\n" +
     items + "\n" +
     "</channel>\n</rss>\n";
 }
@@ -782,14 +800,28 @@ function showExport(opts) {
   });
 }
 
+/* shared footnote for the export panels: names the version of this page
+   that built the output (compare it against the GENERATOR constant in the
+   copy you actually edited — a mismatch means the browser served a stale
+   cached page) and warns when source lines couldn't be parsed. */
+function exportNoteSuffix(skipped) {
+  let s = " Built by <strong>" + escapeHtml(GENERATOR) + "</strong>.";
+  if (skipped) {
+    s += " <strong>Warning:</strong> " + skipped + " line" + (skipped === 1 ? "" : "s") +
+         " in twtxt.txt couldn't be parsed and " + (skipped === 1 ? "is" : "are") +
+         " not included.";
+  }
+  return s;
+}
+
 /* ?feed — rebuild feed.xml from twtxt.txt */
-function showFeedGenerator(meta, posts, feedUrl) {
+function showFeedGenerator(meta, posts, feedUrl, skipped) {
   showExport({
     docTitle: "feed.xml builder",
     heading: "feed.xml builder",
     noteHtml: "The complete <code>feed.xml</code>, rebuilt from <code>twtxt.txt</code>. " +
       "Copy or download it, save it as <code>feed.xml</code> in your site, then publish. " +
-      '<a href="./">Back to the feed</a>.',
+      '<a href="./">Back to the feed</a>.' + exportNoteSuffix(skipped),
     filename: "feed.xml",
     mime: "application/rss+xml;charset=utf-8",
     content: buildRssFeed(meta, posts, feedUrl)
@@ -824,14 +856,14 @@ function buildStaticSite(meta, posts, feedUrl) {
     "</body>\n</html>\n";
 }
 
-function showStaticExport(meta, posts, feedUrl) {
+function showStaticExport(meta, posts, feedUrl, skipped) {
   showExport({
     docTitle: "static site export",
     heading: "static site export",
     noteHtml: "A complete <strong>JavaScript-free</strong> copy of your site — just HTML and " +
       "CSS, with your posts baked in. Save it as your <code>index.html</code> to serve a no-JS " +
       "site; re-export whenever you add a post. " +
-      '<a href="./">Back to the feed</a>.',
+      '<a href="./">Back to the feed</a>.' + exportNoteSuffix(skipped),
     filename: "index.html",
     mime: "text/html;charset=utf-8",
     content: buildStaticSite(meta, posts, feedUrl)
@@ -925,7 +957,7 @@ function showDropFallback(err) {
       const parsed = parseFeed(String(reader.result));
       const feedUrl = parsed.meta.url || FEED_URL;
       // honour the requested mode (?feed / ?static / reader) with the dropped file
-      renderForMode(parsed.meta, parsed.posts, feedUrl);
+      renderForMode(parsed.meta, parsed.posts, feedUrl, null, parsed.skipped);
     };
     reader.readAsText(file);
   }
@@ -1048,7 +1080,7 @@ function loadFollowFeed(nick, url) {
 function timelineItemHtml(entry, knownHashes) {
   const hash = twtHash(entry.feedUrl, entry.post.timestamp, entry.post.text);
   const sub = splitSubject(entry.post.text);
-  const via = '<a href="' + attrEscape(entry.feedUrl) + '" rel="noopener">' +
+  const via = '<a href="' + attrEscape(entry.feedUrl) + '" rel="noopener noreferrer">' +
               escapeHtml(entry.nick) + "</a>";
   // reply seeds the composer with the conversation root and the author's
   // mention, ready to paste into twtxt.txt once written
@@ -1076,7 +1108,7 @@ function followStatusHtml(results) {
     const safe = httpUrl(res.url);
     const label = escapeHtml(res.nick || hostLabel(res.url));
     const name = "<strong>" +
-      (safe ? '<a href="' + attrEscape(safe) + '" rel="noopener">' + label + "</a>"
+      (safe ? '<a href="' + attrEscape(safe) + '" rel="noopener noreferrer">' + label + "</a>"
             : label) + "</strong>";
     if (res.error) {
       return '<li style="margin:0.5em 0">' + name + " couldn’t be loaded. " +
@@ -1144,11 +1176,11 @@ const MODE = pageMode();
 
 /* Render the page for the active mode. Shared by the network path and the
    offline drop fallback, so ?feed and ?static work offline (via drag-drop). */
-function renderForMode(meta, posts, feedUrl, fetchedFrom) {
+function renderForMode(meta, posts, feedUrl, fetchedFrom, skipped) {
   if (MODE === "feed") {
-    showFeedGenerator(meta, posts, feedUrl);
+    showFeedGenerator(meta, posts, feedUrl, skipped);
   } else if (MODE === "static") {
-    showStaticExport(meta, posts, feedUrl);
+    showStaticExport(meta, posts, feedUrl, skipped);
   } else if (MODE === "timeline") {
     showTimeline(meta, posts, feedUrl);
   } else {
@@ -1156,6 +1188,12 @@ function renderForMode(meta, posts, feedUrl, fetchedFrom) {
     // fetchedFrom (where twtxt.txt was really loaded from) anchors archive
     // fetches, so "# prev" works even when previewing away from # url
     renderFeed(feedUrl, posts, meta, fetchedFrom);
+    if (skipped) {
+      document.getElementById("feed").insertAdjacentHTML("afterbegin",
+        '<p class="notice">' + skipped + " line" + (skipped === 1 ? "" : "s") +
+        " in twtxt.txt couldn't be read as a post (missing tab or bad timestamp) and " +
+        (skipped === 1 ? "isn't" : "aren't") + " shown.</p>");
+    }
   }
 }
 
@@ -1169,12 +1207,12 @@ if (MODE === "editor") {
       return r.text();
     })
     .then(function (txt) {
-      const { meta, posts } = parseFeed(txt);
+      const { meta, posts, skipped } = parseFeed(txt);
       // the feed's canonical URL comes from the file itself (# url = ...);
       // fall back to this page's location if it's missing.
       const fetchedFrom = new URL(FEED_URL, location.href).href;
       const feedUrl = meta.url || fetchedFrom;
-      renderForMode(meta, posts, feedUrl, fetchedFrom);
+      renderForMode(meta, posts, feedUrl, fetchedFrom, skipped);
     })
     .catch(showDropFallback);
 }
