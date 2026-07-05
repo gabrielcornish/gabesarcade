@@ -424,14 +424,21 @@ function splitSubject(raw) {
   return { hash: m[2], text: (m[1] + raw.slice(m[0].length)).trim() };
 }
 
-/* the marker itself, shared by the page, the static export and the RSS
-   items; href points at the root post when we know where it is, null
-   renders a plain unlinked marker */
+/* Where to send readers who meet a "twtxt reply" outside the twtxt world
+   (RSS, crossposts) and don't know what one is: a plain-language primer. */
+const TWTXT_ABOUT = "https://twtxt.dev/";
+
+/* the marker itself, shared by the page, the static export and the RSS items.
+   Only threaded replies (a "(#hash)" subject) get a marker; a mention-only
+   post isn't a reply, so it renders none. href points at the parent when it's
+   one of our own posts (an on-page anchor); otherwise the marker links out to
+   the twtxt primer. The mentioned @nick, linked separately in the body, is
+   what points at the person — the marker's job is the thread, not the person. */
 function subjectHtml(hash, href) {
   if (!hash) return "";
-  return '<p class="post-subject">' +
-         (href ? '<a href="' + attrEscape(href) + '">&#8617; in reply</a>'
-               : "&#8617; in reply") + "</p>";
+  const target = href || TWTXT_ABOUT;
+  return '<p class="post-subject"><a href="' + attrEscape(target) +
+         '" rel="noopener">&#8617; twtxt reply</a></p>';
 }
 
 /* the " · reply" link: opens ?editor with the given text pre-filled */
