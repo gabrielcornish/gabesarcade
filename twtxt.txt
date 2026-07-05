@@ -30,3 +30,4 @@
 2026-07-04T23:03:12Z	(#f5koec3hvqmb) It’s definitely possible. I tried to keep everything the same, but there was some funkiness I did when I was in GitHub. Would that also explain why some of my posts show up twice in twtxt.net when replying?
 2026-07-05T00:22:07Z	(#f5koec3hvqmb) Good to know! However I am still seeing double Twt on all my replies even if I don’t edit/delete
 2026-07-05T00:35:39Z	(#f5koec3hvqmb) The twtxt.app client
+2026-07-05T02:48:01Z	(#f5koec3hvqmb) Seeing it fixed on my end. Thank you 🙏
