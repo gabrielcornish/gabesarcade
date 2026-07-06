@@ -36,3 +36,4 @@
 2026-07-05T20:35:16Z	(#dpaofjiyfcys) @<bender https://twtxt.net/user/bender/twtxt.txt> Nice! It's been a while since I've watched an old samurai movie. I should throw some up on my jellyfin.
 2026-07-06T02:04:39Z	📺 Currently Watching: Cobra Kai Season 4 - damnit, I love this show 🥋👊
 2026-07-06T15:44:00Z	@<prologic https://twtxt.net/user/prologic/twtxt.txt> I noticed CORS is not enabled for feeds.twtxt.net - is that by design?
+2026-07-06T16:04:03Z	(#3lkbrl2imuqn) Good to know! Absolutely, not a high priority. Enjoy your vacation @<prologic https://twtxt.net/user/prologic/twtxt.txt>!
