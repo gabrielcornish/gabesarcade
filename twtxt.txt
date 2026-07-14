@@ -56,3 +56,4 @@
 2026-07-14T01:09:00Z	@<prologic https://twtxt.net/user/prologic/twtxt.txt> where’s the place to submit feature requests for twtxt.app?
 2026-07-14T01:10:02Z	(#pmrf6ftxsdhr) Sorry I meant to say, “where’s the best place” lol
 2026-07-14T13:12:39Z	(#5qpwyu7boeri) @<david https://daiwei.me/twtxt.txt> both of those were authored in twtxt.app. ‘#pmrf6ftxsdhr’ was a reply to post 2026-07-14T01:09:00Z
+2026-07-14T15:22:00Z	(#5qpwyu7boeri) @<david https://daiwei.me/twtxt.txt> Correct, I didn't manually edit the .txt file.
