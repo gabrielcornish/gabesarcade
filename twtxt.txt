@@ -57,3 +57,4 @@
 2026-07-14T01:10:02Z	(#pmrf6ftxsdhr) Sorry I meant to say, “where’s the best place” lol
 2026-07-14T13:12:39Z	(#5qpwyu7boeri) @<david https://daiwei.me/twtxt.txt> both of those were authored in twtxt.app. ‘#pmrf6ftxsdhr’ was a reply to post 2026-07-14T01:09:00Z
 2026-07-14T15:22:00Z	(#5qpwyu7boeri) @<david https://daiwei.me/twtxt.txt> Correct, I didn't manually edit the .txt file.
+2026-07-15T16:41:13Z	Wow, every time I open up twtxt.app, it just gets better and better. The new mentions tab is great and being able to click on your follows has made keeping up with my feed much easier.
