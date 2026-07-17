@@ -63,3 +63,4 @@
 2026-07-17T13:58:37Z	(#o3qfnfvve4gi) I can’t be certain, I believe the VPN up changes depending on which server it connects to
 2026-07-17T15:37:43Z	It’s wild to me that twtxt.app is a better reddit experience than reddit. Instead of going to reddit, I just scroll my Timeline for updates on my favorite subreddit. No noise. Fast load times. Only the updates I care about.
 2026-07-17T16:55:14Z	(#o3qfnfvve4gi) @<david https://daiwei.me/twtxt.txt> bummer, but yeah- totally understandable.
+2026-07-17T19:09:39Z	(#dhvexiqta55l) @<david https://daiwei.me/twtxt.txt> If I'm writing a text only update, there isn't a difference between the preview and the text box, so it goes unused. But, it looks like a handy feature for checking images and links.
