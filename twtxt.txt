@@ -62,3 +62,4 @@
 2026-07-16T15:24:27Z	@<prologic https://twtxt.net/user/prologic/twtxt.txt> I’m unable to access twtxt.net when I’m on my Proton VPN. I think this impacts twtxt.app when loading images from twtxt.net follows. Sometimes I’ll just get ? instead of an image, but when I turn the vpn off it loads fine.
 2026-07-17T13:58:37Z	(#o3qfnfvve4gi) I can’t be certain, I believe the VPN up changes depending on which server it connects to
 2026-07-17T15:37:43Z	It’s wild to me that twtxt.app is a better reddit experience than reddit. Instead of going to reddit, I just scroll my Timeline for updates on my favorite subreddit. No noise. Fast load times. Only the updates I care about.
+2026-07-17T16:55:14Z	(#o3qfnfvve4gi) @<david https://daiwei.me/twtxt.txt> bummer, but yeah- totally understandable.
