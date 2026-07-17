@@ -10,6 +10,7 @@
 # follow = 🎮-reddit-games https://raw.githubusercontent.com/gabrielcornish/twtxt-timeline/main/feeds/reddit-games.txt
 # follow = bender https://twtxt.net/user/bender/twtxt.txt
 # follow = prologic https://twtxt.net/user/prologic/twtxt.txt
+# client = twtxt-app/0.1
 
 2026-07-02T12:00:40-07:00	I've been trying to figure out an easy way to write micro posts on the internet. I think I've settled on using Twxtxt as my format.
 2026-07-02T12:03:57-07:00	![Enjoy Today](https://gabesarcade.com/images/enjoy_today.gif)
@@ -59,3 +60,4 @@
 2026-07-14T15:22:00Z	(#5qpwyu7boeri) @<david https://daiwei.me/twtxt.txt> Correct, I didn't manually edit the .txt file.
 2026-07-15T16:41:13Z	Wow, every time I open up twtxt.app, it just gets better and better. The new mentions tab is great and being able to click on your follows has made keeping up with my feed much easier.
 2026-07-16T15:24:27Z	@<prologic https://twtxt.net/user/prologic/twtxt.txt> I’m unable to access twtxt.net when I’m on my Proton VPN. I think this impacts twtxt.app when loading images from twtxt.net follows. Sometimes I’ll just get ? instead of an image, but when I turn the vpn off it loads fine.
+2026-07-17T13:58:37Z	(#o3qfnfvve4gi) I can’t be certain, I believe the VPN up changes depending on which server it connects to
