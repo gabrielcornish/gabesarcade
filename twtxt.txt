@@ -1,15 +1,11 @@
 # nick = GabesArcade
 # url = https://gabesarcade.com/twtxt.txt
-# avatar = https://gabesarcade.com/favicon.ico
-# description = My small corner of the web. Come on in.
-# link = Home https://gabesarcade.com
-# link = twtxt https://gabesarcade.com/twtxt.txt
-# link = RSS https://gabesarcade.com/feed.xml
-# link = Following  https://gabesarcade.com?timeline
 # follow = rdlmda https://rdlmda.me/twtxt.txt
 # follow = 🎮-reddit-games https://raw.githubusercontent.com/gabrielcornish/twtxt-timeline/main/feeds/reddit-games.txt
 # follow = bender https://twtxt.net/user/bender/twtxt.txt
 # follow = prologic https://twtxt.net/user/prologic/twtxt.txt
+# avatar = https://gabesarcade.com/favicon.ico
+# description = Game Designer (Age of Empires II). This is my small corner of the web. Come on in.
 # client = twtxt-app/0.1
 
 2026-07-02T12:00:40-07:00	I've been trying to figure out an easy way to write micro posts on the internet. I think I've settled on using Twxtxt as my format.
