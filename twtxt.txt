@@ -101,3 +101,4 @@
 2026-08-12T00:48:13Z	(#4rjahurhebi7) @<mariam https://twtpub.com/u/mariam/twtxt.txt> welcome!
 2026-08-17T13:52:54Z	(#dqtlmy3lvzip) @<itsericwoodward https://itsericwoodward.com/twtxt.txt> might I say, she is looking very regal indeed.
 2026-08-20T05:48:56Z	I’ve started to isolate a lot of my IoT devices onto VLANs, because I realized I just don’t trust the companies behind those devices.
+2026-08-20T13:58:23Z	(#kq37wq77dlv6) Smart TVs or streaming boxes, Nest thermostat, etc…
