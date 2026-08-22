@@ -103,3 +103,4 @@
 2026-08-20T05:48:56Z	I’ve started to isolate a lot of my IoT devices onto VLANs, because I realized I just don’t trust the companies behind those devices.
 2026-08-20T13:58:23Z	(#kq37wq77dlv6) Smart TVs or streaming boxes, Nest thermostat, etc…
 2026-08-20T18:11:22Z	(#kq37wq77dlv6) For the most part yes, but for things like streaming boxes there aren’t that many options besides Roku, Fire, and Google. Apple is probably the best of the bunch but not perfect. I want to build one with a raspberry pi, but those are so expensive right now.
+2026-08-22T03:11:54Z	(#d3xfkp3cuj4m) @<itsericwoodward https://itsericwoodward.com/twtxt.txt> proud to be one of those 34! 🍻
